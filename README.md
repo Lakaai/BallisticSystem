@@ -1,9 +1,5 @@
 ## Resources
 
-### Gaussian Processes 
-
-
-
 ### Stochastic Differential Equations
 
 MIT Lecture Series: https://www.youtube.com/watch?v=qdbkvD4N-us&t=21s&ab_channel=MITOpenCourseWare
