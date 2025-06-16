@@ -1,0 +1,3 @@
+/home/luke/Gaimersheim_a2d2/BallisticSystem/build/CMakeFiles/BallisticSystem.dir
+/home/luke/Gaimersheim_a2d2/BallisticSystem/build/CMakeFiles/edit_cache.dir
+/home/luke/Gaimersheim_a2d2/BallisticSystem/build/CMakeFiles/rebuild_cache.dir

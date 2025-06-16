@@ -1,0 +1,26 @@
+[
+{
+  "directory": "/home/luke/Gaimersheim_a2d2/BallisticSystem/build",
+  "command": "/home/linuxbrew/.linuxbrew/bin/clang++ -isystem /home/linuxbrew/.linuxbrew/include -g -std=gnu++17 -o CMakeFiles/BallisticSystem.dir/src/main.cpp.o -c /home/luke/Gaimersheim_a2d2/BallisticSystem/src/main.cpp",
+  "file": "/home/luke/Gaimersheim_a2d2/BallisticSystem/src/main.cpp",
+  "output": "CMakeFiles/BallisticSystem.dir/src/main.cpp.o"
+},
+{
+  "directory": "/home/luke/Gaimersheim_a2d2/BallisticSystem/build",
+  "command": "/home/linuxbrew/.linuxbrew/bin/clang++ -isystem /home/linuxbrew/.linuxbrew/include -g -std=gnu++17 -o CMakeFiles/BallisticSystem.dir/src/System.cpp.o -c /home/luke/Gaimersheim_a2d2/BallisticSystem/src/System.cpp",
+  "file": "/home/luke/Gaimersheim_a2d2/BallisticSystem/src/System.cpp",
+  "output": "CMakeFiles/BallisticSystem.dir/src/System.cpp.o"
+},
+{
+  "directory": "/home/luke/Gaimersheim_a2d2/BallisticSystem/build",
+  "command": "/home/linuxbrew/.linuxbrew/bin/clang++ -isystem /home/linuxbrew/.linuxbrew/include -g -std=gnu++17 -o CMakeFiles/BallisticSystem.dir/src/KalmanFilter.cpp.o -c /home/luke/Gaimersheim_a2d2/BallisticSystem/src/KalmanFilter.cpp",
+  "file": "/home/luke/Gaimersheim_a2d2/BallisticSystem/src/KalmanFilter.cpp",
+  "output": "CMakeFiles/BallisticSystem.dir/src/KalmanFilter.cpp.o"
+},
+{
+  "directory": "/home/luke/Gaimersheim_a2d2/BallisticSystem/build",
+  "command": "/home/linuxbrew/.linuxbrew/bin/clang++ -isystem /home/linuxbrew/.linuxbrew/include -g -std=gnu++17 -o CMakeFiles/BallisticSystem.dir/src/StateEstimator.cpp.o -c /home/luke/Gaimersheim_a2d2/BallisticSystem/src/StateEstimator.cpp",
+  "file": "/home/luke/Gaimersheim_a2d2/BallisticSystem/src/StateEstimator.cpp",
+  "output": "CMakeFiles/BallisticSystem.dir/src/StateEstimator.cpp.o"
+}
+]
