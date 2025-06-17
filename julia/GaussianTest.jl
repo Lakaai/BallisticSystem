@@ -27,7 +27,7 @@ include("Gaussian.jl")
                 S = cholesky(Σ).U
                 pdf = Gaussian(μ, Matrix(S))
 
-                logp_expected = logpdf(MvNormal(μ, Σ), x)
+                logp_expected = logpdf(MvNormal(μ, Σ), x)  # Compare to Distributions.jl
                 logp = log_sqrt_pdf(x, pdf)
                 @test isapprox(logp, logp_expected; atol=1e-8)
 

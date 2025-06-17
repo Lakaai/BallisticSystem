@@ -163,3 +163,17 @@
 
 # # If you're not explicitly passing them into the cost function, they must be captured by closure or global scope, 
 # # which is often bad practice or unintentional.
+using Plots
+x = -2π:0.1:+2π
+y11 = sin.(x)
+y12 = sin.(x .+ 0.25π)
+y21 = cos.(x)
+y22 = sin.(x) .* cos.(x)
+
+plot(
+    plot(x, y11),
+    plot!(x, y12),
+    
+    plot(x, y21),
+    plot!(x, y22)
+)

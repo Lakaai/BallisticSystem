@@ -32,7 +32,7 @@ function predict_measurement(x; grad=false)
         dhdx[1, 1] = (h1 - r2)/h
         return h, dhdx
     else 
-        return h
+        return [h]
     end 
 end 
 
