@@ -4,17 +4,11 @@ using LinearAlgebra
 using Infiltrator
 using Plots
 
-# TODO: Setup Unit Test for logpdf
-# TODO: Setup toy problem for using Optim bfgs update method
-# TODO: Gaussian Processes 
-# TODO: Understand the \ operator for solving AX = B and why that is better than inv() 
-
-include("SystemEstimator.jl")
+include("system_estimator.jl")
 include("Gaussian.jl")
 
 data = CSV.read("data/estimationdata.csv", DataFrame)
-# @show data 
-# assert(false)
+
 nx = 3  # Dimension of state vector
 ny = 1  # Dimension of measurement vector
 
@@ -24,16 +18,14 @@ y_hist = data[:, 6]             # Measurement data
 
 mu0 = [14000.0; -450.0; 0.0005] # Initial state estimate
 S0 = Matrix(Diagonal([2200.0, 100.0, 1e-3])) # Initial covariance estimate
-Σ0 = Matrix(Diagonal([2200.0^2, 100.0^2, 1e-3^2]))
 
-function run_filter(t_hist, y_hist, mu0, Σ0)
+function run_sqrt_filter(t_hist, y_hist, mu0, S0)
 
-    # density = from_sqrt_moment(mu0, S0) # TODO: Implement square root covariance
-    density = from_moment(mu0, Σ0)
+    density = from_sqrt_moment(mu0, S0)
 
     nsteps = nrow(data) - 1 # Number of time steps
     μ_hist = [] 
-    Σ_hist = []
+    S_hist = []
     update_method = AFFINE
 
     for i = 1:nsteps
@@ -43,10 +35,10 @@ function run_filter(t_hist, y_hist, mu0, Σ0)
         println("Time: ", time)
 
         # 1. Predict forward in time 
-        density = predict(time, density) # Form the predicted density p(x[k] ∣ y[k]:y[k-1]) by propagating p(x[k-1] ∣ y[k]:y[k-1]) through the process model 
+        density = predict(time, density; sqrt=true) # Form the predicted density p(x[k] ∣ y[k]:y[k-1]) by propagating p(x[k-1] ∣ y[k]:y[k-1]) through the process model 
 
         # 2. Process the measurement event
-        density = update(density, measurement, update_method) # Compute the filtered density p(x[k] ∣ y[1]:y[k])
+        density = update(density, measurement, update_method; sqrt=true) # Compute the filtered density p(x[k] ∣ y[1]:y[k])
         
         # 3. Store the data for plotting
         push!(μ_hist, density.mean)

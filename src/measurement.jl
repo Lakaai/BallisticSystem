@@ -4,6 +4,36 @@ const r1 = 5000; # Horizontal position of sensor [m]
 const r2 = 5000; # Vertical position of sensor [m]
 
 """
+    augmented_predict_measurement(x; grad=false)
+
+Form the augmented measurement model 
+[ 𝑥ₖ ] = [     𝑥ₖ     ]
+[ 𝑦ₖ ]   [ h(𝑥ₖ) +  w ]                 # Noise term not included yet
+
+# Arguments
+- `x::AbstractVector`: The state vector, assumed to be at least of length 1.
+- `grad::Bool`: If `true`, also returns the Jacobian ∂h/∂x.
+
+# Returns
+-
+
+"""
+# TODO: Noise term not included yet
+function augmented_predict_measurement(𝑥; grad=false)
+
+
+    𝑦 = predict_measurement(𝑥; grad=grad)
+
+    if grad
+        error("Not implemented yet")
+        h, dhdx = predict_measurement(𝑥; grad=grad)
+    else 
+        
+        augmented_mean = vcat(𝑥, 𝑦)
+        return augmented_mean
+    end 
+end 
+"""
     predict_measurement(x; grad=false)
 
 Evaluate the nonlinear measurement function `h(x)` and, optionally, its Jacobian.
@@ -25,14 +55,14 @@ Evaluate the nonlinear measurement function `h(x)` and, optionally, its Jacobian
 function predict_measurement(x; grad=false)
 
     h1 = x[1]
-    h = sqrt(r1^2 + (h1-r2)^2)
+    h = [sqrt(r1^2 + (h1 - r2)^2)]
 
     if grad 
         dhdx = zeros(eltype(x), 1, 3) # Create matrix filled with zeros, where each zero has the same type as the elements of x (required for handling Dual types).
-        dhdx[1, 1] = (h1 - r2)/h
+        dhdx[1, 1] = (h1 - r2) / h
         return h, dhdx
     else 
-        return [h]
+        return h
     end 
 end 
 
