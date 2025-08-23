@@ -5,42 +5,42 @@ using Infiltrator
 using Plots
 
 include("system_estimator.jl")
-include("Gaussian.jl")
+include("gaussian.jl")
 
-data = CSV.read("data/estimationdata.csv", DataFrame)
+data = CSV.read("data/estimationdata.csv", DataFrame, header=true)
 
 nx = 3  # Dimension of state vector
 ny = 1  # Dimension of measurement vector
 
-t_hist = data[:, 1][1:end-1]    # Time stamps
-x_hist = data[1:end-1, 2:4]     # State data
-y_hist = data[:, 6]             # Measurement data 
+t_hist = data[:, 1]         # Time stamps
+x_hist = data[:, 2:4]       # State data
+y_hist = data[:, 6]         # Measurement data 
 
-mu0 = [14000.0; -450.0; 0.0005] # Initial state estimate
-S0 = Matrix(Diagonal([2200.0, 100.0, 1e-3])) # Initial covariance estimate
+mu0 = [14000.0; -450.0; 0.0005]                     # Initial state estimate
+Σ0 = Matrix(Diagonal([2200.0, 100.0, 1e-3].^2))     # Initial covariance estimate
 
-function run_sqrt_filter(t_hist, y_hist, mu0, S0)
+function run_filter(t_hist, y_hist, mu0, Σ0)
 
-    density = from_sqrt_moment(mu0, S0)
+    density = from_moment(mu0, Σ0)
 
-    nsteps = nrow(data) - 1 # Number of time steps
+    nsteps = nrow(data)     # Number of time steps
     μ_hist = [] 
-    S_hist = []
-    update_method = AFFINE
+    Σ_hist = []
 
     for i = 1:nsteps
 
-        time = t_hist[i]        # Get the current time
-        measurement = y_hist[i]           # Get the current measurement
+        time = t_hist[i]                # Get the current time
+        measurement = [y_hist[i]]       # Get the current measurement and convert to vector type since estimation machinery expects vector valued measurement
+
         println("Time: ", time)
 
-        # 1. Predict forward in time 
-        density = predict(time, density; sqrt=true) # Form the predicted density p(x[k] ∣ y[k]:y[k-1]) by propagating p(x[k-1] ∣ y[k]:y[k-1]) through the process model 
+        # Predict forward in time 
+        density = predict(time, density, AFFINE; sqrt=false)            # Form the predicted density p(𝑥ₖ ∣ 𝑦₁:𝑦ₖ₋₁) by propagating p(𝑥ₖ₋₁ ∣ 𝑦₁:𝑦ₖ₋₁) through the process model 
 
-        # 2. Process the measurement event
-        density = update(density, measurement, update_method; sqrt=true) # Compute the filtered density p(x[k] ∣ y[1]:y[k])
+        # Process the measurement event
+        density = update(density, measurement, BFGSTRUST; sqrt=false)   # Compute the filtered density p(𝑥ₖ ∣ 𝑦₁:𝑦ₖ)
         
-        # 3. Store the data for plotting
+        # Store the data for plotting
         push!(μ_hist, density.mean)
         push!(Σ_hist, sqrt.(diag(density.covariance)))
         
@@ -48,8 +48,6 @@ function run_sqrt_filter(t_hist, y_hist, mu0, S0)
     return μ_hist, Σ_hist
 end 
 
-
-#  μ_hist, Σ_hist = run_filter(t_hist, y_hist, mu0, S0) # TODO: Implement square root covariance
 μ_hist, Σ_hist = run_filter(t_hist, y_hist, mu0, Σ0)
 
 # Convert to matrices for easier plot handling
@@ -78,3 +76,6 @@ xlabel!(p3, "Time [s]")
 xlabel!(p6, "Time [s]")
 
 plot(p1, p4, p2, p5, p3, p6, layout=(3, 2), size=(800, 800))
+
+
+

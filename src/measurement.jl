@@ -1,14 +1,15 @@
-include("Gaussian.jl")
+include("gaussian.jl")
 
 const r1 = 5000; # Horizontal position of sensor [m]
 const r2 = 5000; # Vertical position of sensor [m]
+
 
 """
     augmented_predict_measurement(x; grad=false)
 
 Form the augmented measurement model 
 [ 𝑥ₖ ] = [     𝑥ₖ     ]
-[ 𝑦ₖ ]   [ h(𝑥ₖ) +  w ]                 # Noise term not included yet
+[ 𝑦ₖ ]   [ h(𝑥ₖ) +  w ]                 # TODO: Noise term not included yet
 
 # Arguments
 - `x::AbstractVector`: The state vector, assumed to be at least of length 1.
@@ -21,7 +22,6 @@ Form the augmented measurement model
 # TODO: Noise term not included yet
 function augmented_predict_measurement(𝑥; grad=false)
 
-
     𝑦 = predict_measurement(𝑥; grad=grad)
 
     if grad
@@ -33,6 +33,8 @@ function augmented_predict_measurement(𝑥; grad=false)
         return augmented_mean
     end 
 end 
+
+
 """
     predict_measurement(x; grad=false)
 
@@ -55,16 +57,17 @@ Evaluate the nonlinear measurement function `h(x)` and, optionally, its Jacobian
 function predict_measurement(x; grad=false)
 
     h1 = x[1]
-    h = [sqrt(r1^2 + (h1 - r2)^2)]
+    h = sqrt(r1^2 + (h1 - r2)^2)
 
     if grad 
         dhdx = zeros(eltype(x), 1, 3) # Create matrix filled with zeros, where each zero has the same type as the elements of x (required for handling Dual types).
         dhdx[1, 1] = (h1 - r2) / h
-        return h, dhdx
+        return [h], dhdx
     else 
-        return h
+        return [h]
     end 
 end 
+
 
 """
     predictDensity(x)
@@ -83,15 +86,17 @@ Computes the predicted measurement density `p(y | x)` as a Gaussian and returns 
 - Measurement model: `y = h(x) + v` with v ∼ N(0, σ²).
 """
 function predictDensity(x)
-    sigma_rng = 50.0 # 50m standard deviation
+    # sigma_rng = 50.0 # 50m standard deviation
 
     h, dhdx = predict_measurement(x; grad=true)
     
-    SR = Matrix(Diagonal([sigma_rng]))
-    # TODO: Fix (see lab5 cpp)
+    # SR = Matrix(Diagonal([50.0]))
+    # # TODO: Fix (see lab5 cpp)
+    Σ = Matrix(Diagonal([50.0].^2))
 
-    return Gaussian([h], SR), dhdx
+    return Gaussian(h, Σ), dhdx
 end 
+
 
 """
     logLikelihood(x, measurement; grad=false)
@@ -114,10 +119,10 @@ optionally returning the gradient with respect to state `x`.
 - Uses the chain rule: ∂/∂x log p(y | x) = -Jᵀ ∂/∂y log N(y; h(x), R)
 - Evaluates log N(y; h(x), R) and d/dy log N(y; h(x), R)
 """
-function logLikelihood(x, measurement; grad=false)
+function logLikelihood(x, measurement; grad=false, sqrt=sqrt)
     
     likelihood, dhdx = predictDensity(x) # Compute the measurement likelihood p(x∣z) = N(y; h(x), R)
-    log_likelihood, log_likelihood_gradient =  log_sqrt_pdf(measurement, likelihood; grad=true) # Compute the log likelihood logp(x∣z) = log N(y; h(x), R)
+    log_likelihood, log_likelihood_gradient =  log_pdf(measurement, likelihood; grad=true, sqrt=sqrt) # Compute the log likelihood logp(x∣z) = log N(y; h(x), R)
     if grad
         gradient = -dhdx' * log_likelihood_gradient;
         return log_likelihood, gradient;

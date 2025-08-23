@@ -5,7 +5,7 @@ using Infiltrator
 
 include("measurement.jl")
 
-@enum UpdateMethod AFFINE UNSCENTED NEWTONTRUSTEIG BFGSTRUSTSQRTINV
+@enum UpdateMethod AFFINE UNSCENTED NEWTONTRUSTEIG BFGSTRUST
 
 const p0 = 101.325e3       # Air pressure at sea level [Pa]
 const M  = 0.0289644       # Molar mass of dry air [kg/mol]
@@ -32,44 +32,21 @@ function predict(time::Any, density::Gaussian, update_method::UpdateMethod; sqrt
     # Define process noise covariance Q
     Q = Matrix(Diagonal([1e-20, 25e-12, 0.0]))  # [velocity, drag coeff, altitude (no noise)]
 
-    μ𝑥 = density.mean
     process_model = μ𝑥 -> rk4_step(μ𝑥, dt)
-    println("================================================")
-    println("Predicting....")
-    println("================================================")
-    if sqrt 
+    
+    if update_method == UNSCENTED
 
-        if update_method == UNSCENTED
+        predicted_density = unscented_transform(process_model, density; sqrt=sqrt)
+        predicted_density = from_moment(predicted_density.mean, predicted_density.covariance + Q)   # Add process noise after transformation
 
-            predicted_density = unscented_transform(process_model, density; sqrt=true)
-            predicted_density = from_moment(predicted_density.mean, predicted_density.covariance + Q)   # Add process noise after transformation
+    elseif update_method == AFFINE
 
-        elseif update_method == AFFINE
-
-            predicted_density = affine_transform(process_model, density; sqrt=true)
-            predicted_density = from_moment(predicted_density.mean, predicted_density.covariance + Q)   # Add process noise after transformation
-
-        else
-            error("Invalid prediction method: $update_method")
-        end  
+        predicted_density = affine_transform(process_model, density; sqrt=sqrt)
+        predicted_density = from_moment(predicted_density.mean, predicted_density.covariance + Q)   # Add process noise after transformation
 
     else
-
-        if update_method == UNSCENTED
-
-            predicted_density = unscented_transform(process_model, density; sqrt=false)
-            predicted_density = from_moment(predicted_density.mean, predicted_density.covariance + Q)   # Add process noise after transformation
-
-        elseif update_method == AFFINE
-
-            predicted_density = affine_transform(process_model, density; sqrt=false)
-            predicted_density = from_moment(predicted_density.mean, predicted_density.covariance + Q)   # Add process noise after transformation
-
-        else
-            error("Invalid prediction method: $update_method")
-        end  
-
-    end 
+        error("Invalid prediction method: $update_method")
+    end  
 
     return predicted_density
 
@@ -92,16 +69,12 @@ function unscented_transform(func::Any, density::Gaussian; sqrt=sqrt)
 
         Σ𝑥 = 0.5 * (Σ𝑥 + Σ𝑥')                   # force symmetry
         # Add regularization for numerical stability
-        ε = 1e-3
-        # Σ𝑥_reg = Σ𝑥 + ε * I
-        # @show Σ𝑥_reg
+        # ε = 1e-3
+       
 
-        Σ𝑥_reg = Σ𝑥 + ε * I
-        Sₓ = cholesky((L + λ) * Σ𝑥_reg).L
-        println("================================================")
-        println("Eigenvalues sigma reg: ", eigvals((L + λ) * Σ𝑥_reg))
-        println("Eigenvalues sigma (L + λ) * Σ𝑥: ", eigvals((L + λ) * Σ𝑥))
-        println("================================================")
+        # Σ𝑥_reg = Σ𝑥 + ε * I
+        # Sₓ = cholesky((L + λ) * Σ𝑥_reg).L
+
         Sₓ = cholesky((L + λ) * Σ𝑥).L
         𝛘 = zeros(Float64, L, 2L + 1)
         𝛘[:, 1] = μ𝑥
@@ -120,23 +93,16 @@ function unscented_transform(func::Any, density::Gaussian; sqrt=sqrt)
         𝑾ᶜ[2:end] .= 1 / (2 * (L + λ))
 
         # Transform sigma points through measurement model
-        # @show 𝛘[:, 1]
-        μ𝑦 = func(𝛘[:, 1])
+        μ𝑦 = func(𝛘[:, 1]) # 𝒴[:, 1] = μ𝑦
         n𝑦 = length(μ𝑦)
         𝒴 = zeros(n𝑦, 2L + 1)    # Assuming scalar measurements
 
-        # @show μ𝑦
-        # @show Σ𝑦
         𝒴[:, 1] = μ𝑦
-        for i in 2:(2L + 1)
-            
-            
-           
-            
+        
+        for i in 2:(2L + 1)    
             𝒴[:, i] = func(𝛘[:, i])
-            # @show 𝒴[:, i]
         end
-        # @show size(𝒴)
+        
         # Compute measurement statistics
 
         # μ𝑦 = sum(𝑾ᵐ[i] * 𝒴[i] for i in 1:(2L + 1))
@@ -367,12 +333,12 @@ In general a `factory` is an object for creating other objects, in this case it 
 - A function with signature f(x) that can be passed to the optimiser.
 
 """
-function cost_function_factory(density::Gaussian, measurement)
+function cost_function_factory(density::Gaussian, measurement; sqrt=sqrt)
     return function(x) # Returns a cost function f(x) which has the required signature for the optimiser
-        logprior = log_sqrt_pdf(x, density)
+        logprior = log_pdf(x, density; grad=false, sqrt=sqrt)
 
         # You must define this based on your measurement model
-        loglik, _ = logLikelihood(x, measurement; grad=true)
+        loglik, _ = logLikelihood(x, measurement; grad=true, sqrt=sqrt)
 
          # Return a scalar cost (negative log-likelihood (the measurement cost) + log-prior (the prediction cost))
         return -(logprior + loglik) # Return −logp(x∣z) = -(logp(x) + logp(z∣x))
@@ -380,26 +346,47 @@ function cost_function_factory(density::Gaussian, measurement)
 end
 
 
-function measurement_update_bfgs(density::Gaussian, measurement::Any)
-    x0 = density.mean
-    S = density.covariance
+function measurement_update_bfgs(density::Gaussian, measurement::Any; sqrt=sqrt)
+    if sqrt
+        error("Not implemented yet") # TODO: Implement square root BFGS update
+        x0 = density.mean
+        S = density.covariance
 
-    df = TwiceDifferentiable(cost_function_factory(density, measurement), x0, autodiff = :forward) # Store and reuse gradient and hessian 
-    res = optimize(df, x0, BFGS())
-    # @assert res.converged "res has not converged"
+        df = TwiceDifferentiable(cost_function_factory(density, measurement; sqrt=sqrt), x0, autodiff = :forward) # Store and reuse gradient and hessian 
+        res = optimize(df, x0, BFGS())
+        # @assert res.converged "res has not converged"
 
-    x_map = Optim.minimizer(res)
+        x_map = Optim.minimizer(res)
 
-    # Posterior sqrt covariance approximation (naive)
-    H = ForwardDiff.hessian(cost_function_factory(density, measurement), x_map)
-    @show H
-    # H_inv = inv(H)
-    # Q, R = qr(H_inv) # Perform QR decomposition
-    F = cholesky(H)   # H = F'U F, F.U is upper triangular
-    S = Matrix(inv(F.U))      # S * S' = H^{-1}
-    
-    return Gaussian(x_map, S)
-    # ℐ = ∫ₓf(x)dx ≈ f(x*) √det(2*π*P) Laplace approximation
+        # Posterior sqrt covariance approximation (naive)
+        H = ForwardDiff.hessian(cost_function_factory(density, measurement; sqrt=sqrt), x_map)
+        @show H
+        # H_inv = inv(H)
+        # Q, R = qr(H_inv) # Perform QR decomposition
+        F = cholesky(H)   # H = F'U F, F.U is upper triangular
+        S = Matrix(inv(F.U))      # S * S' = H^{-1}
+        
+        return Gaussian(x_map, S)
+        # ℐ = ∫ₓf(x)dx ≈ f(x*) √det(2*π*P) Laplace approximation
+
+    else 
+        x0 = density.mean
+        Σ = density.covariance
+
+        df = TwiceDifferentiable(cost_function_factory(density, measurement; sqrt=sqrt), x0, autodiff = :forward) # Store and reuse gradient and hessian 
+        res = optimize(df, x0, BFGS())
+        # @assert res.converged "res has not converged"
+
+        x_map = Optim.minimizer(res)
+
+        # Posterior sqrt covariance approximation (naive)
+        H = ForwardDiff.hessian(cost_function_factory(density, measurement; sqrt=sqrt), x_map)
+        @show H
+         
+        Σ = Matrix(inv(H))     
+        
+        return Gaussian(x_map, Σ)
+    end 
 end 
 
 function measurement_update_unscented(density::Gaussian, measurement::Any; sqrt=sqrt)
@@ -408,6 +395,7 @@ function measurement_update_unscented(density::Gaussian, measurement::Any; sqrt=
         # Form the joint probability density 𝑝(𝑥ₖ, 𝑦ₖ | 𝑦₁...𝑦ₖ₋₁), that is the probability of the state 𝑥ₖ and the measurement 𝑦ₖ given all past measurements 𝑦₁, 𝑦₂, ..., 𝑦ₖ₋₁
         # new_density = unscented_transform(predict_measurement, density; sqrt=true)
         error("Not implemented yet") # TODO: Implement square root covariance
+
         # Condition on the measurement 𝑦ₖ to form the posterior density 𝑝(𝑥ₖ | 𝑦ₖ)
 
         # Return the posterior density 𝑝(𝑥ₖ | 𝑦ₖ)
@@ -415,45 +403,31 @@ function measurement_update_unscented(density::Gaussian, measurement::Any; sqrt=
         
     else 
 
-        # # Measurement noise covariance
+        # Measurement noise covariance
         # R = Matrix(Diagonal([50.0^2]))  # Adjust as needed
-        # R = 50
         noise_density = Gaussian(0, Matrix(Diagonal([50.0^2])))
 
         # density = join(density, noise_density)
 
-        # func = μ𝑥 -> measurement(μ𝑥)
-        transformed_density = unscented_transform(augmented_predict_measurement, density; sqrt=false)
-        @show transformed_density.mean
+        # Form the joint probability density 𝑝(𝑥ₖ, 𝑦ₖ | 𝑦₁...𝑦ₖ₋₁), that is the probability of the state 𝑥ₖ and the measurement 𝑦ₖ given all past measurements 𝑦₁, 𝑦₂, ..., 𝑦ₖ₋₁
+        transformed_density = unscented_transform(augmented_predict_measurement, density; sqrt=sqrt)
 
         L = length(density.mean)
         μ = transformed_density.mean
         Σ = transformed_density.covariance
         
-        R = 50.0^2                    # pick your variance
-        Σ[L+1:end, L+1:end] .+= R     # measurement block
-        Σ = 0.5 .* (Σ .+ Σ')          # symmetrize
+        R = Matrix(Diagonal([50.0^2]))                    # pick your variance
+        Σ[L+1:end, L+1:end] += R     # measurement block
+        Σ = 0.5 * (Σ + Σ')          # symmetrize
         
         transformed_density = from_moment(μ, Σ)
-        
-        # μx = μ[1:L]; μy = μ[L+1:end]
-        # Σxx = Σ[1:L, 1:L]; Σxy = Σ[1:L, L+1:end]; Σyy = Σ[L+1:end, L+1:end]
-        # # R = 50.0^2
-        # K = Σxy / (Σyy)
-        # yhat = μy[1]
-        # innov = measurement[1] - yhat
-        # @show μx[1], yhat, measurement[1], innov, Σxy[1], K[1]
-        # μx_expected = μx .+ K * innov
-        # Σx_expected = Σxx .- K * Σyy * K'
-        # @show μx_expected
-        # @show Σx_expected
 
-        updated_density = condition(transformed_density, 1:3, 4, measurement; sqrt=false)
+        # Condition on the measurement 𝑦ₖ to form the posterior density 𝑝(𝑥ₖ | 𝑦ₖ)
+        updated_density = conditional(transformed_density, 1:3, 4, measurement; sqrt=sqrt)
 
         μ_updated = updated_density.mean
         Σ_updated = updated_density.covariance
-        println("Updated mean after condition: ", μ_updated)
-        println("Updated covariance after condition: ", Σ_updated)
+
         return from_moment(μ_updated, Σ_updated)
 
         # My CODE
@@ -468,7 +442,7 @@ function measurement_update_unscented(density::Gaussian, measurement::Any; sqrt=
     end 
 end 
 
-function measurement_update_affine(density::Gaussian, measurement::Any; sqrt=false)
+function measurement_update_affine(density::Gaussian, measurement::Any; sqrt=sqrt)
     if sqrt
         error("Not implemented yet") # TODO: Implement square root affine update
     else 
@@ -488,13 +462,13 @@ function measurement_update_affine(density::Gaussian, measurement::Any; sqrt=fal
     end 
 end 
 
-function update(density::Gaussian, measurement::Any, update_method::UpdateMethod; sqrt=false)
-    if update_method == BFGSTRUSTSQRTINV
-        density = measurement_update_bfgs(density, measurement)
+function update(density::Gaussian, measurement::Any, update_method::UpdateMethod; sqrt=sqrt)
+    if update_method == BFGSTRUST
+        density = measurement_update_bfgs(density, measurement; sqrt=sqrt)
     elseif update_method == UNSCENTED
-        density = measurement_update_unscented(density, measurement; sqrt=false) 
+        density = measurement_update_unscented(density, measurement; sqrt=sqrt) 
     elseif update_method == AFFINE
-        density = measurement_update_affine(density, measurement; sqrt=false)
+        density = measurement_update_affine(density, measurement; sqrt=sqrt)
     elseif update_method == NEWTONTRUSTEIG
         error("Not implemented yet")
         # TODO: density = measurement_update_newtontrusteig(density, measurement)
